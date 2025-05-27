@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 11% 98%; /* #F5F7FA */
+  --foreground: 218 10% 15%; /* #262B36 */
+  --muted: 210 11% 96%; /* #F1F3F5 */
+  --muted-foreground: 217 10% 47%; /* #6B7588 */
+  --popover: 0 0% 100%;
+  --popover-foreground: 218 10% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 218 10% 15%;
+  --border: 210 11% 91%; /* #E6E9ED */
+  --input: 210 11% 91%;
+  --primary: 207 90% 54%; /* #1976D2 */
+  --primary-foreground: 211 100% 99%;
+  --secondary: 210 11% 96%;
+  --secondary-foreground: 218 10% 26%; /* #424242 */
+  --accent: 25 95% 53%; /* #FF9800 */
+  --accent-foreground: 0 0% 100%;
+  --destructive: 4 90% 58%; /* #F44336 */
+  --destructive-foreground: 0 0% 100%;
+  --success: 122 39% 49%; /* #4CAF50 */
+  --warning: 25 95% 53%; /* #FF9800 */
+  --ring: 207 90% 54%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 224 71% 4%;
+  --foreground: 213 31% 91%;
+  --muted: 223 47% 11%;
+  --muted-foreground: 215.4 16.3% 56.9%;
+  --popover: 224 71% 4%;
+  --popover-foreground: 213 31% 91%;
+  --card: 224 71% 4%;
+  --card-foreground: 213 31% 91%;
+  --border: 216 34% 17%;
+  --input: 216 34% 17%;
+  --primary: 207 90% 54%;
+  --primary-foreground: 211 100% 99%;
+  --secondary: 222.2 84% 4.9%;
+  --secondary-foreground: 213 31% 91%;
+  --accent: 216 34% 17%;
+  --accent-foreground: 213 31% 91%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 213 31% 91%;
+  --ring: 207 90% 54%;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+/* Custom styles for resume preview */
+.resume-preview {
+  @apply bg-white shadow-lg;
+  width: 8.5in;
+  min-height: 11in;
+  transform: scale(0.6);
+  transform-origin: top center;
+}
+
+.form-section {
+  @apply bg-white rounded-lg shadow-sm p-6 space-y-6;
+}
+
+.section-header {
+  @apply flex items-center justify-between mb-6;
+}
+
+.section-title {
+  @apply text-lg font-semibold text-secondary flex items-center;
+}
+
+.section-icon {
+  @apply mr-3 text-primary;
+}
+
+.form-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4;
+}
+
+.form-field {
+  @apply space-y-2;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-700;
+}
+
+.form-input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary transition-colors;
+}
+
+.form-textarea {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary transition-colors resize-none;
+}
+
+.btn-primary {
+  @apply bg-primary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-700 px-3 py-2 rounded-md text-sm hover:bg-gray-200 transition-colors;
+}
+
+.btn-accent {
+  @apply bg-accent text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-600 transition-colors;
+}
+
+.btn-success {
+  @apply bg-green-500 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-600 transition-colors;
+}
+
+.btn-destructive {
+  @apply bg-destructive text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-red-700 transition-colors;
+}
+
+.skill-tag {
+  @apply bg-blue-100 text-primary px-3 py-1 rounded-full text-sm flex items-center;
+}
+
+.progress-indicator {
+  @apply w-8 h-8 mx-auto rounded-full flex items-center justify-center text-white mb-1;
+}
+
+.toast {
+  @apply fixed top-6 right-6 z-50 transform translate-x-full transition-transform duration-300;
+}
+
+.toast.show {
+  @apply translate-x-0;
+}
+
+.floating-action {
+  @apply w-14 h-14 rounded-full shadow-lg text-white transition-all transform hover:scale-105;
+}
