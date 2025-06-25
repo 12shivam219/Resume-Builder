@@ -18,12 +18,13 @@ import {
   ChevronUp, 
   ChevronDown 
 } from "lucide-react";
-import type { ResumeData, WorkExperience, Education, SkillCategory } from "@shared/schema";
+import type { ResumeData, WorkExperience, Education, SkillCategory, CustomSection } from "@shared/schema";
 import { 
   personalInfoSchema, 
   workExperienceSchema, 
   educationSchema, 
-  skillCategorySchema 
+  skillCategorySchema, 
+  customSectionSchema 
 } from "@shared/schema";
 
 interface ResumeFormProps {
@@ -175,25 +176,72 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
     onUpdateData({ skillCategories: updated });
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Personal Information Section */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="section-header">
-            <h3 className="section-title">
-              <User className="section-icon" />
-              Personal Information
-            </h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => toggleSection('personal')}
-            >
-              {expandedSections.personal ? <ChevronUp /> : <ChevronDown />}
-            </Button>
-          </div>
+  // Custom Sections Functions
+  const addCustomSection = () => {
+    const newSection: CustomSection = {
+      id: generateId(),
+      title: "Custom Section",
+      content: "",
+    };
+    onUpdateData({
+      customSections: [...(resumeData.customSections || []), newSection],
+      sectionOrder: [...(resumeData.sectionOrder || [
+        'personalInfo',
+        'workExperience',
+        'education',
+        'skillCategories',
+      ]), newSection.id],
+    });
+  };
 
+  const updateCustomSection = (id: string, data: Partial<CustomSection>) => {
+    const updated = (resumeData.customSections || []).map(sec =>
+      sec.id === id ? { ...sec, ...data } : sec
+    );
+    onUpdateData({ customSections: updated });
+  };
+
+  const removeCustomSection = (id: string) => {
+    const filtered = (resumeData.customSections || []).filter(sec => sec.id !== id);
+    const newOrder = (resumeData.sectionOrder || []).filter(secId => secId !== id);
+    onUpdateData({ customSections: filtered, sectionOrder: newOrder });
+  };
+
+  // Section Reordering
+  const moveSection = (sectionId: string, direction: 'up' | 'down') => {
+    const order = [...(resumeData.sectionOrder || [])];
+    const index = order.findIndex(id => id === sectionId);
+    if (index === -1) return;
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= order.length) return;
+    [order[index], order[newIndex]] = [order[newIndex], order[index]];
+    onUpdateData({ sectionOrder: order });
+  };
+
+  // Default section order if not provided
+  const sectionOrder = resumeData.sectionOrder || [
+    'personalInfo',
+    'workExperience',
+    'education',
+    'skillCategories',
+    ...(resumeData.customSections?.map(s => s.id) || [])
+  ];
+
+  // Section Renderers
+  const sectionRenderers: Record<string, () => JSX.Element> = {
+    personalInfo: () => (
+      <Card key="personalInfo">
+        <CardContent className="p-6">
+          <div className="section-header flex items-center justify-between">
+            <h3 className="section-title flex items-center"><User className="section-icon" />Personal Information</h3>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => moveSection('personalInfo', 'up')}><ChevronUp /></Button>
+              <Button variant="ghost" size="sm" onClick={() => moveSection('personalInfo', 'down')}><ChevronDown /></Button>
+              <Button variant="ghost" size="sm" onClick={() => toggleSection('personal')}>
+                {expandedSections.personal ? <ChevronUp /> : <ChevronDown />}
+              </Button>
+            </div>
+          </div>
           {expandedSections.personal && (
             <form className="form-grid">
               <div className="form-field">
@@ -238,9 +286,8 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
               <div className="form-field">
                 <Label className="form-label">Email *</Label>
                 <Input
-                  type="email"
                   className="form-input"
-                  placeholder="john.doe@email.com"
+                  placeholder="john@example.com"
                   value={resumeData.personalInfo.email}
                   onChange={(e) => handlePersonalInfoUpdate({
                     ...resumeData.personalInfo,
@@ -252,9 +299,8 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
               <div className="form-field">
                 <Label className="form-label">Phone *</Label>
                 <Input
-                  type="tel"
                   className="form-input"
-                  placeholder="+1 (555) 123-4567"
+                  placeholder="(123) 456-7890"
                   value={resumeData.personalInfo.phone}
                   onChange={(e) => handlePersonalInfoUpdate({
                     ...resumeData.personalInfo,
@@ -307,25 +353,20 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
           )}
         </CardContent>
       </Card>
-
-      {/* Work Experience Section */}
-      <Card>
+    ),
+    workExperience: () => (
+      <Card key="workExperience">
         <CardContent className="p-6">
-          <div className="section-header">
-            <h3 className="section-title">
-              <Briefcase className="section-icon" />
-              Work Experience
-            </h3>
-            <Button
-              onClick={addWorkExperience}
-              className="btn-primary"
-              size="sm"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Experience
-            </Button>
+          <div className="section-header flex items-center justify-between">
+            <h3 className="section-title flex items-center"><Briefcase className="section-icon" />Work Experience</h3>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => moveSection('workExperience', 'up')}><ChevronUp /></Button>
+              <Button variant="ghost" size="sm" onClick={() => moveSection('workExperience', 'down')}><ChevronDown /></Button>
+              <Button variant="ghost" size="sm" onClick={() => toggleSection('experience')}>
+                {expandedSections.experience ? <ChevronUp /> : <ChevronDown />}
+              </Button>
+            </div>
           </div>
-
           {expandedSections.experience && (
             <div className="space-y-4">
               {resumeData.workExperience.map((exp, index) => (
@@ -466,25 +507,20 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
           )}
         </CardContent>
       </Card>
-
-      {/* Education Section */}
-      <Card>
+    ),
+    education: () => (
+      <Card key="education">
         <CardContent className="p-6">
-          <div className="section-header">
-            <h3 className="section-title">
-              <GraduationCap className="section-icon" />
-              Education
-            </h3>
-            <Button
-              onClick={addEducation}
-              className="btn-primary"
-              size="sm"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Education
-            </Button>
+          <div className="section-header flex items-center justify-between">
+            <h3 className="section-title flex items-center"><GraduationCap className="section-icon" />Education</h3>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => moveSection('education', 'up')}><ChevronUp /></Button>
+              <Button variant="ghost" size="sm" onClick={() => moveSection('education', 'down')}><ChevronDown /></Button>
+              <Button variant="ghost" size="sm" onClick={() => toggleSection('education')}>
+                {expandedSections.education ? <ChevronUp /> : <ChevronDown />}
+              </Button>
+            </div>
           </div>
-
           {expandedSections.education && (
             <div className="space-y-4">
               {resumeData.education.map((edu, index) => (
@@ -614,25 +650,20 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
           )}
         </CardContent>
       </Card>
-
-      {/* Skills Section */}
-      <Card>
+    ),
+    skillCategories: () => (
+      <Card key="skillCategories">
         <CardContent className="p-6">
-          <div className="section-header">
-            <h3 className="section-title">
-              <Settings className="section-icon" />
-              Skills & Technologies
-            </h3>
-            <Button
-              onClick={addSkillCategory}
-              className="btn-primary"
-              size="sm"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Category
-            </Button>
+          <div className="section-header flex items-center justify-between">
+            <h3 className="section-title flex items-center"><Settings className="section-icon" />Skills & Technologies</h3>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => moveSection('skillCategories', 'up')}><ChevronUp /></Button>
+              <Button variant="ghost" size="sm" onClick={() => moveSection('skillCategories', 'down')}><ChevronDown /></Button>
+              <Button variant="ghost" size="sm" onClick={() => toggleSection('skills')}>
+                {expandedSections.skills ? <ChevronUp /> : <ChevronDown />}
+              </Button>
+            </div>
           </div>
-
           {expandedSections.skills && (
             <div className="space-y-6">
               {resumeData.skillCategories.map((category) => (
@@ -732,6 +763,55 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
           )}
         </CardContent>
       </Card>
+    )
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Render sections in order */}
+      {sectionOrder.map(sectionId => {
+        if (sectionId in sectionRenderers) {
+          return sectionRenderers[sectionId as keyof typeof sectionRenderers]();
+        }
+        
+        // Handle custom sections
+        const customSection = (resumeData.customSections || []).find(s => s.id === sectionId);
+        if (customSection) {
+          return (
+            <Card key={customSection.id}>
+              <CardContent className="p-6">
+                <div className="section-header flex items-center justify-between">
+                  <Input
+                    className="section-title text-lg font-semibold"
+                    value={customSection.title}
+                    onChange={e => updateCustomSection(customSection.id, { title: e.target.value })}
+                  />
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => moveSection(customSection.id, 'up')}><ChevronUp /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => moveSection(customSection.id, 'down')}><ChevronDown /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => removeCustomSection(customSection.id)}><Trash2 /></Button>
+                  </div>
+                </div>
+                <Textarea
+                  className="mt-2"
+                  rows={4}
+                  placeholder="Section content..."
+                  value={customSection.content || ''}
+                  onChange={e => updateCustomSection(customSection.id, { content: e.target.value })}
+                />
+              </CardContent>
+            </Card>
+          );
+        }
+        
+        return null;
+      })}
+
+      <div className="text-center pt-4">
+        <Button onClick={addCustomSection} variant="outline" size="sm">
+          <Plus className="mr-2 h-4 w-4" /> Add Custom Section
+        </Button>
+      </div>
     </div>
   );
 }

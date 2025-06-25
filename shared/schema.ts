@@ -55,12 +55,34 @@ export const skillCategorySchema = z.object({
   skills: z.array(z.string()).default([]),
 });
 
+// Custom Section Schema
+// Allows users to add any number of custom sections to their resume.
+export const customSectionSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1, "Section title is required"),
+  content: z.string().optional(),
+});
+
 // Complete Resume Data Schema
+// - customSections: array of user-defined sections (e.g., Certifications, Projects)
+// - sectionOrder: controls the order of all sections (built-in and custom)
+// - template: selected template name (e.g., 'modern', 'classic')
+// - templateSettings: optional object for template-specific customization
 export const resumeDataSchema = z.object({
   personalInfo: personalInfoSchema,
   workExperience: z.array(workExperienceSchema).default([]),
   education: z.array(educationSchema).default([]),
   skillCategories: z.array(skillCategorySchema).default([]),
+  customSections: z.array(customSectionSchema).default([]),
+  sectionOrder: z.array(z.string()).default([
+    'personalInfo',
+    'workExperience',
+    'education',
+    'skillCategories',
+    // custom section ids will be appended here dynamically
+  ]),
+  template: z.string().default('modern'),
+  templateSettings: z.record(z.any()).optional(), // for future template-specific settings
 });
 
 export const insertResumeSchema = createInsertSchema(resumes).omit({
@@ -69,6 +91,7 @@ export const insertResumeSchema = createInsertSchema(resumes).omit({
   updatedAt: true,
 });
 
+// Export all types for use in client and server
 export type InsertResume = z.infer<typeof insertResumeSchema>;
 export type Resume = typeof resumes.$inferSelect;
 export type ResumeData = z.infer<typeof resumeDataSchema>;
@@ -76,3 +99,4 @@ export type PersonalInfo = z.infer<typeof personalInfoSchema>;
 export type WorkExperience = z.infer<typeof workExperienceSchema>;
 export type Education = z.infer<typeof educationSchema>;
 export type SkillCategory = z.infer<typeof skillCategorySchema>;
+export type CustomSection = z.infer<typeof customSectionSchema>;

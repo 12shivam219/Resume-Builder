@@ -1,10 +1,37 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ZoomIn, ZoomOut, Download, Save, ChevronDown, FileText } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ZoomIn,
+  ZoomOut,
+  Download,
+  Save,
+  ChevronDown,
+  FileText,
+} from "lucide-react";
 import type { ResumeData } from "@shared/schema";
-import { ModernTemplate, ClassicTemplate, CreativeTemplate, MinimalTemplate } from "@/lib/resume-templates";
+import {
+  ModernTemplate,
+  ClassicTemplate,
+  CreativeTemplate,
+  MinimalTemplate,
+  ElegantTemplate,
+  ATSFriendlyTemplate,
+  InfographicTemplate,
+  BlackWhiteMinimalTemplate,
+} from "@/lib/resume-templates";
 import { useState } from "react";
 
 interface ResumePreviewProps {
@@ -29,23 +56,31 @@ export default function ResumePreview({
   const [zoomLevel, setZoomLevel] = useState(60);
 
   const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 10, 100));
+    setZoomLevel((prev) => Math.min(prev + 10, 100));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 10, 30));
+    setZoomLevel((prev) => Math.max(prev - 10, 30));
   };
 
   const renderTemplate = () => {
     const props = { resumeData, zoomLevel };
-    
+
     switch (selectedTemplate) {
-      case 'classic':
+      case "classic":
         return <ClassicTemplate {...props} />;
-      case 'creative':
+      case "creative":
         return <CreativeTemplate {...props} />;
-      case 'minimal':
+      case "minimal":
         return <MinimalTemplate {...props} />;
+      case "elegant":
+        return <ElegantTemplate {...props} />;
+      case "ats":
+        return <ATSFriendlyTemplate {...props} />;
+      case "infographic":
+        return <InfographicTemplate {...props} />;
+      case "bwminimal":
+        return <BlackWhiteMinimalTemplate {...props} />;
       default:
         return <ModernTemplate {...props} />;
     }
@@ -66,7 +101,9 @@ export default function ResumePreview({
             >
               <ZoomOut className="h-4 w-4" />
             </Button>
-            <span className="text-xs text-gray-500 min-w-[3rem]">{zoomLevel}%</span>
+            <span className="text-xs text-gray-500 min-w-[3rem]">
+              {zoomLevel}%
+            </span>
             <Button
               variant="ghost"
               size="sm"
@@ -89,6 +126,12 @@ export default function ResumePreview({
                 <SelectItem value="classic">Classic Template</SelectItem>
                 <SelectItem value="creative">Creative Template</SelectItem>
                 <SelectItem value="minimal">Minimal Template</SelectItem>
+                <SelectItem value="elegant">Elegant Template</SelectItem>
+                <SelectItem value="ats">ATS-Friendly Template</SelectItem>
+                <SelectItem value="infographic">
+                  Infographic Template
+                </SelectItem>
+                <SelectItem value="bwminimal">Black & White Minimal</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -102,7 +145,7 @@ export default function ResumePreview({
               className="btn-secondary"
             >
               <Save className="mr-1 h-4 w-4" />
-              {isSaving ? 'Saving...' : 'Save'}
+              {isSaving ? "Saving..." : "Save"}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -129,9 +172,7 @@ export default function ResumePreview({
 
       {/* Resume Preview */}
       <CardContent className="flex-1 overflow-auto p-4 bg-gray-50">
-        <div className="flex justify-center">
-          {renderTemplate()}
-        </div>
+        <div className="flex justify-center">{renderTemplate()}</div>
       </CardContent>
     </Card>
   );
