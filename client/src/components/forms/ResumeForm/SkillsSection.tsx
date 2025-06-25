@@ -46,11 +46,11 @@ export const SkillsSection = React.memo<SkillsSectionProps>(
     }, [skillCategories]);
 
     return (
-      <Card key="skillCategories">
+      <Card key="skillCategories" className="mb-4 shadow rounded-lg">
         <CardContent className="p-6">
-          <div className="section-header flex items-center justify-between">
-            <h3 className="section-title flex items-center">
-              <Settings className="section-icon" /> Skills & Technologies
+          <div className="section-header flex items-center justify-between mb-2">
+            <h3 className="section-title flex items-center text-lg font-semibold">
+              <Settings className="section-icon mr-2" /> Skills & Technologies
             </h3>
             <div className="flex gap-1">
               <Button
@@ -80,131 +80,96 @@ export const SkillsSection = React.memo<SkillsSectionProps>(
             </div>
           </div>
           {expanded && (
-            <div className="space-y-6">
-              {skillCategories.map((category, idx) => (
-                <div key={category.id}>
-                  <div className="flex items-center justify-between mb-3">
+            <div className="space-y-4">
+              {skillCategories.map((cat, idx) => (
+                <div
+                  key={cat.id}
+                  className="bg-gray-50 rounded p-4 mb-2 shadow-sm"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+                    <div>
+                      <Label htmlFor={`cat-name-${cat.id}`}>
+                        Category Name
+                      </Label>
+                      <Input
+                        id={`cat-name-${cat.id}`}
+                        value={cat.name}
+                        onChange={(e) =>
+                          onUpdateCategory(cat.id, { name: e.target.value })
+                        }
+                        aria-required="true"
+                        aria-invalid={!!errors[idx]?.name}
+                        aria-describedby={
+                          errors[idx]?.name
+                            ? `cat-name-error-${cat.id}`
+                            : undefined
+                        }
+                        placeholder="e.g. Programming Languages"
+                        className="mb-2"
+                      />
+                      {errors[idx]?.name && (
+                        <span
+                          id={`cat-name-error-${cat.id}`}
+                          className="text-red-600 text-xs"
+                        >
+                          {errors[idx].name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Skills</Label>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {cat.skills.map((skill, skillIdx) => (
+                        <span
+                          key={skillIdx}
+                          className="inline-flex items-center bg-blue-100 text-blue-800 rounded px-2 py-1 text-xs"
+                        >
+                          {skill}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onRemoveSkill(cat.id, skillIdx)}
+                            aria-label="Remove skill"
+                          >
+                            <Trash2 className="ml-1 w-3 h-3" />
+                          </Button>
+                        </span>
+                      ))}
+                    </div>
                     <Input
-                      className="text-sm font-medium bg-transparent border-none focus:ring-0 focus:outline-none text-gray-700 p-0"
-                      placeholder="Programming Languages"
-                      value={category.name}
-                      onChange={(e) =>
-                        onUpdateCategory(category.id, { name: e.target.value })
-                      }
-                      aria-required="true"
-                      aria-invalid={!!errors[idx]?.name}
-                      aria-describedby={
-                        errors[idx]?.name
-                          ? `catname-error-${category.id}`
-                          : undefined
-                      }
+                      placeholder="Add a skill and press Enter"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                          onAddSkill(cat.id, e.currentTarget.value.trim());
+                          e.currentTarget.value = "";
+                        }
+                      }}
+                      className="mb-2"
                     />
-                    {errors[idx]?.name && (
-                      <span
-                        id={`catname-error-${category.id}`}
-                        className="text-red-600 text-xs"
-                      >
-                        {errors[idx].name}
+                    {errors[idx]?.skills && (
+                      <span className="text-red-600 text-xs">
+                        {errors[idx].skills}
                       </span>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onRemoveCategory(category.id)}
-                      className="text-destructive hover:text-red-700"
-                      aria-label="Remove skill category"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {category.skills.map((skill, skillIndex) => (
-                      <span key={skillIndex} className="skill-tag">
-                        {analyzeResult &&
-                        analyzeResult.missingKeywords.includes(
-                          skill.toLowerCase()
-                        ) ? (
-                          <mark
-                            style={{ background: "#ffe066", color: "#222" }}
-                          >
-                            {skill}
-                          </mark>
-                        ) : (
-                          skill
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="ml-2 p-0 h-auto text-primary hover:text-blue-700"
-                          onClick={() => onRemoveSkill(category.id, skillIndex)}
-                          aria-label="Remove skill"
-                        >
-                          ×
-                        </Button>
-                      </span>
-                    ))}
-                  </div>
-                  {errors[idx]?.skills && (
-                    <span className="text-red-600 text-xs">
-                      {errors[idx].skills}
-                    </span>
-                  )}
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      className="flex-1 text-sm"
-                      placeholder="Add a skill..."
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const input = e.target as HTMLInputElement;
-                          onAddSkill(category.id, input.value);
-                          input.value = "";
-                        }
-                      }}
-                      aria-label="Add skill"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        const input =
-                          e.currentTarget.parentElement?.querySelector(
-                            "input"
-                          ) as HTMLInputElement;
-                        if (input && input.value.trim()) {
-                          onAddSkill(category.id, input.value);
-                          input.value = "";
-                        }
-                      }}
-                      aria-label="Add skill button"
-                    >
-                      Add
-                    </Button>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRemoveCategory(cat.id)}
+                    className="mt-2"
+                  >
+                    <Trash2 /> Remove Category
+                  </Button>
                 </div>
               ))}
-              {skillCategories.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <Settings className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                  <p>No skills added yet</p>
-                  <Button
-                    onClick={onAddCategory}
-                    variant="outline"
-                    className="mt-4"
-                  >
-                    <Plus className="mr-2 h-4 w-4" /> Add Your First Skill
-                    Category
-                  </Button>
-                </div>
-              )}
-              {skillCategories.length > 0 && (
-                <div className="text-center py-4 border-t border-gray-200">
-                  <Button onClick={onAddCategory} variant="outline" size="sm">
-                    <Plus className="mr-2 h-4 w-4" /> Add Skill Category
-                  </Button>
-                </div>
-              )}
+              <Button
+                variant="secondary"
+                onClick={onAddCategory}
+                className="w-full mt-2"
+              >
+                <Plus className="mr-1" /> Add Skill Category
+              </Button>
             </div>
           )}
         </CardContent>

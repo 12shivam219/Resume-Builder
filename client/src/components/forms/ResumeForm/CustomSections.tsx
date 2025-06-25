@@ -35,9 +35,9 @@ export const CustomSections = React.memo<CustomSectionsProps>(
     return (
       <>
         {customSections.map((section, idx) => (
-          <Card key={section.id}>
+          <Card key={section.id} className="mb-4 shadow rounded-lg">
             <CardContent className="p-6">
-              <div className="section-header flex items-center justify-between">
+              <div className="section-header flex items-center justify-between mb-2">
                 <Input
                   className="section-title text-lg font-semibold border-none bg-transparent p-0 focus:ring-0 focus:outline-none"
                   value={section.title}
@@ -51,11 +51,12 @@ export const CustomSections = React.memo<CustomSectionsProps>(
                       ? `custom-title-error-${section.id}`
                       : undefined
                   }
+                  placeholder="Section Title"
                 />
                 {errors[idx]?.title && (
                   <span
                     id={`custom-title-error-${section.id}`}
-                    className="text-red-600 text-xs"
+                    className="text-red-600 text-xs ml-2"
                   >
                     {errors[idx].title}
                   </span>
@@ -83,32 +84,21 @@ export const CustomSections = React.memo<CustomSectionsProps>(
                     variant="ghost"
                     size="sm"
                     onClick={() => onRemove(section.id)}
-                    className="text-destructive hover:text-red-700"
                     aria-label="Remove custom section"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 />
                   </Button>
                 </div>
               </div>
-              <div className="form-field mt-4">
-                <Label
-                  className="form-label"
-                  htmlFor={`custom-content-${section.id}`}
-                >
-                  Content
-                </Label>
-                <Textarea
-                  id={`custom-content-${section.id}`}
-                  rows={4}
-                  className="form-textarea"
-                  placeholder="Add details for this section..."
-                  value={section.content}
-                  onChange={(e) =>
-                    onUpdate(section.id, { content: e.target.value })
-                  }
-                  aria-multiline="true"
-                />
-              </div>
+              <Textarea
+                className="w-full border rounded p-2 text-sm mb-2"
+                value={section.content}
+                onChange={(e) =>
+                  onUpdate(section.id, { content: e.target.value })
+                }
+                placeholder="Describe this section..."
+                rows={4}
+              />
             </CardContent>
           </Card>
         ))}

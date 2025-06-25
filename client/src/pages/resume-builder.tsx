@@ -10,12 +10,21 @@ import { useResume } from "@/hooks/use-resume";
 import { PDFGenerator } from "@/components/pdf-generator";
 import { WordGenerator } from "@/components/word-generator";
 import { Menu } from "lucide-react";
+import { ExportOptions } from "../components/export/ExportOptions";
+import { generateMarkdown } from "../components/export/MarkdownGenerator";
+import { generateLinkedInText } from "../components/export/LinkedInGenerator";
+import { ShareResumeModal } from "../components/collaboration/ShareResumeModal";
+import { JobSuggestions } from "../components/job-matching/JobSuggestions";
+import { ApplicationTracker } from "../components/job-matching/ApplicationTracker";
+import { CoverLetterBuilder } from "../components/cover-letter/CoverLetterBuilder";
 
 export default function ResumeBuilder() {
   const { id } = useParams();
   const { toast } = useToast();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  
+  const [showShare, setShowShare] = useState(false);
+  const [coverLetter, setCoverLetter] = useState("");
+
   const {
     resumeData,
     updateResumeData,
@@ -32,10 +41,10 @@ export default function ResumeBuilder() {
         title: "Generating PDF...",
         description: "Your resume is being prepared for download",
       });
-      
+
       const pdfGenerator = new PDFGenerator();
       await pdfGenerator.generatePDF(resumeData, selectedTemplate);
-      
+
       toast({
         title: "Download Complete",
         description: "Your resume PDF has been downloaded successfully",
@@ -55,13 +64,14 @@ export default function ResumeBuilder() {
         title: "Generating Word Document...",
         description: "Your resume is being prepared for download",
       });
-      
+
       const wordGenerator = new WordGenerator();
       await wordGenerator.generateWord(resumeData, selectedTemplate);
-      
+
       toast({
         title: "Download Complete",
-        description: "Your resume Word document has been downloaded successfully",
+        description:
+          "Your resume Word document has been downloaded successfully",
       });
     } catch (error) {
       toast({
@@ -88,6 +98,35 @@ export default function ResumeBuilder() {
     }
   };
 
+  const handleExport = (format: "pdf" | "docx" | "md" | "linkedin") => {
+    if (format === "pdf") return handleDownloadPDF();
+    if (format === "docx") return handleDownloadWord();
+    if (format === "md") {
+      const md = generateMarkdown(resumeData);
+      const blob = new Blob([md], { type: "text/markdown" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "resume.md";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    }
+    if (format === "linkedin") {
+      const text = generateLinkedInText(resumeData);
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "resume-linkedin.txt";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -95,18 +134,29 @@ export default function ResumeBuilder() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-primary">ResumeBuilder Pro</h1>
+              <h1 className="text-2xl font-bold text-primary">
+                ResumeBuilder Pro
+              </h1>
             </div>
-            
+
             <div className="hidden md:block">
               <div className="ml-10 flex items-baseline space-x-4">
-                <a href="#" className="text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium">
+                <a
+                  href="#"
+                  className="text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+                >
                   Templates
                 </a>
-                <a href="#" className="text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium">
+                <a
+                  href="#"
+                  className="text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+                >
                   Examples
                 </a>
-                <a href="#" className="text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium">
+                <a
+                  href="#"
+                  className="text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+                >
                   Help
                 </a>
                 <Button size="sm" className="btn-primary">
@@ -114,7 +164,7 @@ export default function ResumeBuilder() {
                 </Button>
               </div>
             </div>
-            
+
             <div className="md:hidden">
               <Button
                 variant="ghost"
@@ -137,41 +187,109 @@ export default function ResumeBuilder() {
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-secondary">Resume Progress</h2>
-                  <span className="text-sm text-gray-600">{progress}% Complete</span>
+                  <h2 className="text-lg font-semibold text-secondary">
+                    Resume Progress
+                  </h2>
+                  <span className="text-sm text-gray-600">
+                    {progress}% Complete
+                  </span>
                 </div>
-                
+
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-primary h-2 rounded-full transition-all duration-300" 
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all duration-300"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                
+
                 <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
                   <div className="text-center">
-                    <div className={`progress-indicator ${progress >= 25 ? 'bg-success' : 'bg-gray-300'}`}>
-                      {progress >= 25 ? '✓' : '1'}
+                    <div
+                      className={`progress-indicator ${
+                        progress >= 25 ? "bg-success" : "bg-gray-300"
+                      }`}
+                    >
+                      {progress >= 25 ? "✓" : "1"}
                     </div>
-                    <span className={progress >= 25 ? 'text-gray-600' : 'text-gray-400'}>Personal</span>
+                    <span
+                      className={
+                        progress >= 25 ? "text-gray-600" : "text-gray-400"
+                      }
+                    >
+                      Personal
+                    </span>
                   </div>
                   <div className="text-center">
-                    <div className={`progress-indicator ${progress >= 50 ? 'bg-success' : progress >= 25 ? 'bg-primary' : 'bg-gray-300'}`}>
-                      {progress >= 50 ? '✓' : '2'}
+                    <div
+                      className={`progress-indicator ${
+                        progress >= 50
+                          ? "bg-success"
+                          : progress >= 25
+                          ? "bg-primary"
+                          : "bg-gray-300"
+                      }`}
+                    >
+                      {progress >= 50 ? "✓" : "2"}
                     </div>
-                    <span className={progress >= 50 ? 'text-gray-600' : progress >= 25 ? 'text-primary font-medium' : 'text-gray-400'}>Experience</span>
+                    <span
+                      className={
+                        progress >= 50
+                          ? "text-gray-600"
+                          : progress >= 25
+                          ? "text-primary font-medium"
+                          : "text-gray-400"
+                      }
+                    >
+                      Experience
+                    </span>
                   </div>
                   <div className="text-center">
-                    <div className={`progress-indicator ${progress >= 75 ? 'bg-success' : progress >= 50 ? 'bg-primary' : 'bg-gray-300'}`}>
-                      {progress >= 75 ? '✓' : '3'}
+                    <div
+                      className={`progress-indicator ${
+                        progress >= 75
+                          ? "bg-success"
+                          : progress >= 50
+                          ? "bg-primary"
+                          : "bg-gray-300"
+                      }`}
+                    >
+                      {progress >= 75 ? "✓" : "3"}
                     </div>
-                    <span className={progress >= 75 ? 'text-gray-600' : progress >= 50 ? 'text-primary font-medium' : 'text-gray-400'}>Education</span>
+                    <span
+                      className={
+                        progress >= 75
+                          ? "text-gray-600"
+                          : progress >= 50
+                          ? "text-primary font-medium"
+                          : "text-gray-400"
+                      }
+                    >
+                      Education
+                    </span>
                   </div>
                   <div className="text-center">
-                    <div className={`progress-indicator ${progress >= 100 ? 'bg-success' : progress >= 75 ? 'bg-primary' : 'bg-gray-300'}`}>
-                      {progress >= 100 ? '✓' : '4'}
+                    <div
+                      className={`progress-indicator ${
+                        progress >= 100
+                          ? "bg-success"
+                          : progress >= 75
+                          ? "bg-primary"
+                          : "bg-gray-300"
+                      }`}
+                    >
+                      {progress >= 100 ? "✓" : "4"}
                     </div>
-                    <span className={progress >= 100 ? 'text-gray-600' : progress >= 75 ? 'text-primary font-medium' : 'text-gray-400'}>Skills</span>
+                    <span
+                      className={
+                        progress >= 100
+                          ? "text-gray-600"
+                          : progress >= 75
+                          ? "text-primary font-medium"
+                          : "text-gray-400"
+                      }
+                    >
+                      Skills
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -211,10 +329,10 @@ export default function ResumeBuilder() {
           {isSaving ? (
             <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
           ) : (
-            '✓'
+            "✓"
           )}
         </Button>
-        
+
         <Button
           size="icon"
           className="floating-action bg-accent hover:bg-orange-600"
@@ -223,6 +341,39 @@ export default function ResumeBuilder() {
         >
           ↓
         </Button>
+      </div>
+
+      {/* Export Options */}
+      <ExportOptions onExport={handleExport} />
+      {/* Share Resume */}
+      <Button onClick={() => setShowShare(true)}>Share Resume</Button>
+      {showShare && (
+        <ShareResumeModal
+          resumeId={id || "local"}
+          onClose={() => setShowShare(false)}
+        />
+      )}
+      {/* Job Suggestions */}
+      <JobSuggestions
+        keywords={resumeData.skillCategories.flatMap((c) => c.skills)}
+      />
+      {/* Application Tracker */}
+      <ApplicationTracker />
+
+      {/* Cover Letter Builder */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <h2 className="font-semibold text-lg mt-6">Cover Letter Builder</h2>
+        <CoverLetterBuilder
+          resumeSummary={resumeData.personalInfo.summary || ""}
+          jobDescription={resumeData.jobDescription || ""}
+          onGenerate={setCoverLetter}
+        />
+        {coverLetter && (
+          <div className="mt-2">
+            <h3 className="font-semibold text-md">Generated Cover Letter</h3>
+            <Textarea rows={8} value={coverLetter} readOnly />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -46,6 +46,7 @@ import { AnalyticsPanel } from "../forms/ResumeForm/AnalyticsPanel";
 import { getResumeAnalytics } from "../forms/ResumeForm/analyticsUtils";
 import { ResumeStorage } from "@/lib/resume-storage";
 import flesch from "flesch"; // You may need to install a simple readability package or use a local function
+import { highlightKeywords } from "../forms/ResumeForm/utils";
 
 interface ResumeFormProps {
   resumeData: ResumeData;
@@ -442,27 +443,9 @@ export default function ResumeForm({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-3xl mx-auto p-4 bg-gray-50 rounded-lg shadow-md">
       {/* Analytics Panel */}
-      <AnalyticsPanel
-        wordCount={analytics.wordCount}
-        keywordDensity={analytics.keywordDensity}
-        completeness={analytics.completeness}
-        sections={analytics.sections}
-        uniqueWordCount={analytics.uniqueWordCount}
-        vocabularyRichness={analytics.vocabularyRichness}
-        mostCommonWords={analytics.mostCommonWords}
-        spellingErrorCount={analytics.spellingErrorCount}
-        spellingErrors={analytics.spellingErrors}
-        passiveSentenceCount={analytics.passiveSentenceCount}
-        passiveSentences={analytics.passiveSentences}
-        sentenceStats={analytics.sentenceStats}
-        readingTime={analytics.readingTime}
-        bulletStats={analytics.bulletStats}
-        cliches={analytics.cliches}
-        flesch={analytics.flesch}
-        sectionReadability={analytics.sectionReadability}
-      />
+      <AnalyticsPanel {...analytics} />
       {/* AI Toggle and API Key */}
       <div className="flex items-center gap-4 mb-4">
         <AiToggle useAi={useAi} onChange={setUseAi} />
@@ -478,14 +461,17 @@ export default function ResumeForm({
       </div>
       {/* Job Description Input for Analysis */}
       <div className="mb-4">
-        <Label>Paste Job Description for Analysis:</Label>
+        <Label className="block mb-1 font-medium">
+          Paste Job Description for Analysis:
+        </Label>
         <Textarea
           rows={3}
+          placeholder="Paste the job description here..."
           value={jobDesc}
           onChange={(e) => setJobDesc(e.target.value)}
-          placeholder="Paste the job description here..."
+          className="w-full border rounded p-2 text-sm"
         />
-        <Button className="mt-2" onClick={debouncedAnalyzeJobDesc}>
+        <Button onClick={analyzeJobDescription} className="mt-2">
           Analyze Job Description
         </Button>
       </div>

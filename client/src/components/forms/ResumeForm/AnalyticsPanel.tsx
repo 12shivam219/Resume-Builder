@@ -53,9 +53,9 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
   flesch,
   sectionReadability,
 }) => (
-  <div className="mb-4">
-    <div className="font-semibold text-sm">Resume Analytics</div>
-    <div className="flex flex-wrap gap-4 text-xs">
+  <div className="mb-4 p-4 bg-white rounded shadow">
+    <div className="font-semibold text-sm mb-2">Resume Analytics</div>
+    <div className="flex flex-wrap gap-4 text-xs mb-2">
       <div>
         Word Count: <b>{wordCount}</b>
       </div>
@@ -78,7 +78,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
         Flesch Readability: <b>{flesch}</b>
       </div>
     </div>
-    <div className="flex flex-wrap gap-2 text-xs">
+    <div className="flex flex-wrap gap-2 text-xs mb-2">
       {sections.map((s) => (
         <span key={s.name} style={{ color: s.filled ? "#228B22" : "#B22222" }}>
           {s.filled ? "✔" : "✖"} {s.name}
