@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Suspense, useCallback, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,42 +8,103 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { 
-  User, 
-  Briefcase, 
-  GraduationCap, 
-  Settings, 
-  Plus, 
-  Trash2, 
-  ChevronUp, 
-  ChevronDown 
+import {
+  User,
+  Briefcase,
+  GraduationCap,
+  Settings,
+  Plus,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
-import type { ResumeData, WorkExperience, Education, SkillCategory, CustomSection } from "@shared/schema";
-import { 
-  personalInfoSchema, 
-  workExperienceSchema, 
-  educationSchema, 
-  skillCategorySchema, 
-  customSectionSchema 
+import type {
+  ResumeData,
+  WorkExperience,
+  Education,
+  SkillCategory,
+  CustomSection,
 } from "@shared/schema";
+import {
+  personalInfoSchema,
+  workExperienceSchema,
+  educationSchema,
+  skillCategorySchema,
+  customSectionSchema,
+} from "@shared/schema";
+import { parseResumeFile } from "@/lib/resume-parser";
+import { AiToggle } from "./ai-toggle";
+import {
+  localSuggestSummary,
+  localSuggestWorkBullets,
+  localAnalyzeJobDescription,
+  getAISummary,
+  getAIWorkBullets,
+  analyzeJobDescriptionAI,
+} from "@/lib/ai-suggest";
+import { AnalyticsPanel } from "../forms/ResumeForm/AnalyticsPanel";
+import { getResumeAnalytics } from "../forms/ResumeForm/analyticsUtils";
+import { ResumeStorage } from "@/lib/resume-storage";
+import flesch from "flesch"; // You may need to install a simple readability package or use a local function
 
 interface ResumeFormProps {
   resumeData: ResumeData;
   onUpdateData: (data: Partial<ResumeData>) => void;
 }
 
-export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps) {
+// Lazy load all major sections for code splitting
+const LazyPersonalInfoSection = React.lazy(
+  () => import("../forms/ResumeForm/PersonalInfoSection")
+);
+const LazyWorkExperienceSection = React.lazy(
+  () => import("../forms/ResumeForm/WorkExperienceSection")
+);
+const LazyEducationSection = React.lazy(
+  () => import("../forms/ResumeForm/EducationSection")
+);
+const LazySkillsSection = React.lazy(
+  () => import("../forms/ResumeForm/SkillsSection")
+);
+const LazyCustomSections = React.lazy(
+  () => import("../forms/ResumeForm/CustomSections")
+);
+
+export default function ResumeForm({
+  resumeData,
+  onUpdateData,
+}: ResumeFormProps) {
   const [expandedSections, setExpandedSections] = useState({
     personal: true,
     experience: true,
     education: true,
     skills: true,
   });
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [jobDesc, setJobDesc] = useState("");
+  const [analyzeResult, setAnalyzeResult] = useState<{
+    missingKeywords: string[];
+    suggestions: string;
+  } | null>(null);
+  const [useAi, setUseAi] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [tone, setTone] = useState("formal");
+  const [showVersions, setShowVersions] = useState(false);
+  const [versions, setVersions] = useState(() => ResumeStorage.getVersions());
+
+  // Tone/style options for AI suggestions
+  const TONE_OPTIONS = [
+    { value: "formal", label: "Formal" },
+    { value: "friendly", label: "Friendly" },
+    { value: "concise", label: "Concise" },
+    { value: "enthusiastic", label: "Enthusiastic" },
+    { value: "neutral", label: "Neutral" },
+  ];
 
   const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections(prev => ({
+    setExpandedSections((prev) => ({
       ...prev,
-      [section]: !prev[section]
+      [section]: !prev[section],
     }));
   };
 
@@ -71,31 +132,31 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
       current: false,
       description: "",
     };
-    
+
     onUpdateData({
-      workExperience: [...resumeData.workExperience, newExperience]
+      workExperience: [...resumeData.workExperience, newExperience],
     });
   };
 
   const updateWorkExperience = (id: string, data: Partial<WorkExperience>) => {
-    const updated = resumeData.workExperience.map(exp =>
+    const updated = resumeData.workExperience.map((exp) =>
       exp.id === id ? { ...exp, ...data } : exp
     );
     onUpdateData({ workExperience: updated });
   };
 
   const removeWorkExperience = (id: string) => {
-    const filtered = resumeData.workExperience.filter(exp => exp.id !== id);
+    const filtered = resumeData.workExperience.filter((exp) => exp.id !== id);
     onUpdateData({ workExperience: filtered });
   };
 
-  const moveWorkExperience = (id: string, direction: 'up' | 'down') => {
-    const index = resumeData.workExperience.findIndex(exp => exp.id === id);
+  const moveWorkExperience = (id: string, direction: "up" | "down") => {
+    const index = resumeData.workExperience.findIndex((exp) => exp.id === id);
     if (index === -1) return;
-    
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
+
+    const newIndex = direction === "up" ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= resumeData.workExperience.length) return;
-    
+
     const updated = [...resumeData.workExperience];
     [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
     onUpdateData({ workExperience: updated });
@@ -113,21 +174,21 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
       endYear: undefined,
       gpa: undefined,
     };
-    
+
     onUpdateData({
-      education: [...resumeData.education, newEducation]
+      education: [...resumeData.education, newEducation],
     });
   };
 
   const updateEducation = (id: string, data: Partial<Education>) => {
-    const updated = resumeData.education.map(edu =>
+    const updated = resumeData.education.map((edu) =>
       edu.id === id ? { ...edu, ...data } : edu
     );
     onUpdateData({ education: updated });
   };
 
   const removeEducation = (id: string) => {
-    const filtered = resumeData.education.filter(edu => edu.id !== id);
+    const filtered = resumeData.education.filter((edu) => edu.id !== id);
     onUpdateData({ education: filtered });
   };
 
@@ -138,29 +199,29 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
       name: "",
       skills: [],
     };
-    
+
     onUpdateData({
-      skillCategories: [...resumeData.skillCategories, newCategory]
+      skillCategories: [...resumeData.skillCategories, newCategory],
     });
   };
 
   const updateSkillCategory = (id: string, data: Partial<SkillCategory>) => {
-    const updated = resumeData.skillCategories.map(cat =>
+    const updated = resumeData.skillCategories.map((cat) =>
       cat.id === id ? { ...cat, ...data } : cat
     );
     onUpdateData({ skillCategories: updated });
   };
 
   const removeSkillCategory = (id: string) => {
-    const filtered = resumeData.skillCategories.filter(cat => cat.id !== id);
+    const filtered = resumeData.skillCategories.filter((cat) => cat.id !== id);
     onUpdateData({ skillCategories: filtered });
   };
 
   const addSkill = (categoryId: string, skill: string) => {
     if (!skill.trim()) return;
-    
-    const updated = resumeData.skillCategories.map(cat =>
-      cat.id === categoryId 
+
+    const updated = resumeData.skillCategories.map((cat) =>
+      cat.id === categoryId
         ? { ...cat, skills: [...cat.skills, skill.trim()] }
         : cat
     );
@@ -168,9 +229,12 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
   };
 
   const removeSkill = (categoryId: string, skillIndex: number) => {
-    const updated = resumeData.skillCategories.map(cat =>
-      cat.id === categoryId 
-        ? { ...cat, skills: cat.skills.filter((_, index) => index !== skillIndex) }
+    const updated = resumeData.skillCategories.map((cat) =>
+      cat.id === categoryId
+        ? {
+            ...cat,
+            skills: cat.skills.filter((_, index) => index !== skillIndex),
+          }
         : cat
     );
     onUpdateData({ skillCategories: updated });
@@ -185,34 +249,41 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
     };
     onUpdateData({
       customSections: [...(resumeData.customSections || []), newSection],
-      sectionOrder: [...(resumeData.sectionOrder || [
-        'personalInfo',
-        'workExperience',
-        'education',
-        'skillCategories',
-      ]), newSection.id],
+      sectionOrder: [
+        ...(resumeData.sectionOrder || [
+          "personalInfo",
+          "workExperience",
+          "education",
+          "skillCategories",
+        ]),
+        newSection.id,
+      ],
     });
   };
 
   const updateCustomSection = (id: string, data: Partial<CustomSection>) => {
-    const updated = (resumeData.customSections || []).map(sec =>
+    const updated = (resumeData.customSections || []).map((sec) =>
       sec.id === id ? { ...sec, ...data } : sec
     );
     onUpdateData({ customSections: updated });
   };
 
   const removeCustomSection = (id: string) => {
-    const filtered = (resumeData.customSections || []).filter(sec => sec.id !== id);
-    const newOrder = (resumeData.sectionOrder || []).filter(secId => secId !== id);
+    const filtered = (resumeData.customSections || []).filter(
+      (sec) => sec.id !== id
+    );
+    const newOrder = (resumeData.sectionOrder || []).filter(
+      (secId) => secId !== id
+    );
     onUpdateData({ customSections: filtered, sectionOrder: newOrder });
   };
 
   // Section Reordering
-  const moveSection = (sectionId: string, direction: 'up' | 'down') => {
+  const moveSection = (sectionId: string, direction: "up" | "down") => {
     const order = [...(resumeData.sectionOrder || [])];
-    const index = order.findIndex(id => id === sectionId);
+    const index = order.findIndex((id) => id === sectionId);
     if (index === -1) return;
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    const newIndex = direction === "up" ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= order.length) return;
     [order[index], order[newIndex]] = [order[newIndex], order[index]];
     onUpdateData({ sectionOrder: order });
@@ -220,598 +291,402 @@ export default function ResumeForm({ resumeData, onUpdateData }: ResumeFormProps
 
   // Default section order if not provided
   const sectionOrder = resumeData.sectionOrder || [
-    'personalInfo',
-    'workExperience',
-    'education',
-    'skillCategories',
-    ...(resumeData.customSections?.map(s => s.id) || [])
+    "personalInfo",
+    "workExperience",
+    "education",
+    "skillCategories",
+    ...(resumeData.customSections?.map((s) => s.id) || []),
   ];
 
-  // Section Renderers
-  const sectionRenderers: Record<string, () => JSX.Element> = {
-    personalInfo: () => (
-      <Card key="personalInfo">
-        <CardContent className="p-6">
-          <div className="section-header flex items-center justify-between">
-            <h3 className="section-title flex items-center"><User className="section-icon" />Personal Information</h3>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => moveSection('personalInfo', 'up')}><ChevronUp /></Button>
-              <Button variant="ghost" size="sm" onClick={() => moveSection('personalInfo', 'down')}><ChevronDown /></Button>
-              <Button variant="ghost" size="sm" onClick={() => toggleSection('personal')}>
-                {expandedSections.personal ? <ChevronUp /> : <ChevronDown />}
-              </Button>
-            </div>
-          </div>
-          {expandedSections.personal && (
-            <form className="form-grid">
-              <div className="form-field">
-                <Label className="form-label">First Name *</Label>
-                <Input
-                  className="form-input"
-                  placeholder="John"
-                  value={resumeData.personalInfo.firstName}
-                  onChange={(e) => handlePersonalInfoUpdate({
-                    ...resumeData.personalInfo,
-                    firstName: e.target.value
-                  })}
-                />
-              </div>
+  // --- Analytics panel ---
+  const analytics = useMemo(
+    () => getResumeAnalytics(resumeData, analyzeResult, jobDesc),
+    [resumeData, analyzeResult, jobDesc]
+  );
+  // Advanced analytics: word/character count per section, keyword density per section, keyword frequency, readability, ATS check
+  const sectionAnalytics = useMemo(() => {
+    const summary = resumeData.personalInfo.summary || "";
+    const work = resumeData.workExperience
+      .map((w) => w.description || "")
+      .join(" ");
+    const education = resumeData.education
+      .map((e) => `${e.degree} ${e.field} ${e.institution}`)
+      .join(" ");
+    const skills = resumeData.skillCategories
+      .flatMap((c) => c.skills)
+      .join(" ");
+    const sections = [
+      { name: "Summary", text: summary },
+      { name: "Work Experience", text: work },
+      { name: "Education", text: education },
+      { name: "Skills", text: skills },
+    ];
+    const keywordList = (jobDesc.match(/\b\w+\b/g) || []).map((k) =>
+      k.toLowerCase()
+    );
+    // Keyword frequency map
+    const keywordFreq: Record<string, number> = {};
+    keywordList.forEach((k) => {
+      keywordFreq[k] = 0;
+    });
+    const allText = [summary, work, education, skills].join(" ").toLowerCase();
+    keywordList.forEach((k) => {
+      const re = new RegExp(`\\b${k}\\b`, "gi");
+      keywordFreq[k] = (allText.match(re) || []).length;
+    });
+    // Readability (Flesch Reading Ease)
+    function getReadability(text: string) {
+      if (!text.trim()) return "-";
+      try {
+        // Use a simple Flesch implementation or fallback
+        return Math.round(flesch(text));
+      } catch {
+        return "-";
+      }
+    }
+    // ATS compatibility: check for tables, images, columns, or non-standard fonts (simple heuristic)
+    function getATSCompatibility(text: string) {
+      if (/table|column|image|font/i.test(text)) return "Low";
+      if (text.length < 100) return "Low";
+      return "High";
+    }
+    return sections.map((sec) => {
+      const words = sec.text.split(/\s+/).filter(Boolean);
+      const chars = sec.text.length;
+      const presentKeywords = keywordList.filter((k) =>
+        sec.text.toLowerCase().includes(k)
+      );
+      const keywordCoverage = keywordList.length
+        ? Math.round((presentKeywords.length / keywordList.length) * 100)
+        : 0;
+      return {
+        ...sec,
+        wordCount: words.length,
+        charCount: chars,
+        keywordCoverage,
+        readability: getReadability(sec.text),
+        ats: getATSCompatibility(sec.text),
+      };
+    });
+  }, [resumeData, jobDesc]);
 
-              <div className="form-field">
-                <Label className="form-label">Last Name *</Label>
-                <Input
-                  className="form-input"
-                  placeholder="Doe"
-                  value={resumeData.personalInfo.lastName}
-                  onChange={(e) => handlePersonalInfoUpdate({
-                    ...resumeData.personalInfo,
-                    lastName: e.target.value
-                  })}
-                />
-              </div>
+  // Section expansion state helpers
+  const sectionExpanded = {
+    personalInfo: expandedSections.personal,
+    workExperience: expandedSections.experience,
+    education: expandedSections.education,
+    skillCategories: expandedSections.skills,
+  };
 
-              <div className="form-field md:col-span-2">
-                <Label className="form-label">Professional Title</Label>
-                <Input
-                  className="form-input"
-                  placeholder="Senior Software Engineer"
-                  value={resumeData.personalInfo.title || ""}
-                  onChange={(e) => handlePersonalInfoUpdate({
-                    ...resumeData.personalInfo,
-                    title: e.target.value
-                  })}
-                />
-              </div>
+  // Section move helpers
+  const moveSectionUp = (section: string) => moveSection(section, "up");
+  const moveSectionDown = (section: string) => moveSection(section, "down");
 
-              <div className="form-field">
-                <Label className="form-label">Email *</Label>
-                <Input
-                  className="form-input"
-                  placeholder="john@example.com"
-                  value={resumeData.personalInfo.email}
-                  onChange={(e) => handlePersonalInfoUpdate({
-                    ...resumeData.personalInfo,
-                    email: e.target.value
-                  })}
-                />
-              </div>
+  // Debounced job description analysis
+  const debouncedAnalyzeJobDesc = useCallback(
+    debounce(handleAnalyzeJobDesc, 500),
+    [jobDesc, useAi, apiKey, resumeData]
+  );
 
-              <div className="form-field">
-                <Label className="form-label">Phone *</Label>
-                <Input
-                  className="form-input"
-                  placeholder="(123) 456-7890"
-                  value={resumeData.personalInfo.phone}
-                  onChange={(e) => handlePersonalInfoUpdate({
-                    ...resumeData.personalInfo,
-                    phone: e.target.value
-                  })}
-                />
-              </div>
+  // Save version on every update
+  useEffect(() => {
+    ResumeStorage.saveVersion(resumeData);
+    setVersions(ResumeStorage.getVersions());
+  }, [resumeData]);
 
-              <div className="form-field md:col-span-2">
-                <Label className="form-label">Address</Label>
-                <Input
-                  className="form-input"
-                  placeholder="123 Main St, City, State 12345"
-                  value={resumeData.personalInfo.address || ""}
-                  onChange={(e) => handlePersonalInfoUpdate({
-                    ...resumeData.personalInfo,
-                    address: e.target.value
-                  })}
-                />
-              </div>
+  // Restore version handler
+  const handleRestoreVersion = (index: number) => {
+    const version = ResumeStorage.restoreVersion(index);
+    if (version) {
+      onUpdateData(version.data);
+    }
+  };
 
-              <div className="form-field md:col-span-2">
-                <Label className="form-label">LinkedIn URL</Label>
-                <Input
-                  type="url"
-                  className="form-input"
-                  placeholder="https://linkedin.com/in/johndoe"
-                  value={resumeData.personalInfo.linkedin || ""}
-                  onChange={(e) => handlePersonalInfoUpdate({
-                    ...resumeData.personalInfo,
-                    linkedin: e.target.value
-                  })}
-                />
-              </div>
+  // Clear all history
+  const handleClearVersions = () => {
+    ResumeStorage.clearVersions();
+    setVersions([]);
+  };
 
-              <div className="form-field md:col-span-2">
-                <Label className="form-label">Professional Summary</Label>
-                <Textarea
-                  rows={4}
-                  className="form-textarea"
-                  placeholder="Brief overview of your professional background and key achievements..."
-                  value={resumeData.personalInfo.summary || ""}
-                  onChange={(e) => handlePersonalInfoUpdate({
-                    ...resumeData.personalInfo,
-                    summary: e.target.value
-                  })}
-                />
-              </div>
-            </form>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    workExperience: () => (
-      <Card key="workExperience">
-        <CardContent className="p-6">
-          <div className="section-header flex items-center justify-between">
-            <h3 className="section-title flex items-center"><Briefcase className="section-icon" />Work Experience</h3>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => moveSection('workExperience', 'up')}><ChevronUp /></Button>
-              <Button variant="ghost" size="sm" onClick={() => moveSection('workExperience', 'down')}><ChevronDown /></Button>
-              <Button variant="ghost" size="sm" onClick={() => toggleSection('experience')}>
-                {expandedSections.experience ? <ChevronUp /> : <ChevronDown />}
-              </Button>
-            </div>
-          </div>
-          {expandedSections.experience && (
-            <div className="space-y-4">
-              {resumeData.workExperience.map((exp, index) => (
-                <div key={exp.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-2 h-2 bg-primary rounded-full"></div>
-                      <span className="text-sm font-medium text-gray-600">
-                        Experience #{index + 1}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => moveWorkExperience(exp.id, 'up')}
-                        disabled={index === 0}
-                      >
-                        <ChevronUp className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => moveWorkExperience(exp.id, 'down')}
-                        disabled={index === resumeData.workExperience.length - 1}
-                      >
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeWorkExperience(exp.id)}
-                        className="text-destructive hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+  // Export resume data as JSON
+  const handleExport = () => {
+    const dataStr = JSON.stringify(resumeData, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `resume-export-${new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:T]/g, "-")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-                  <div className="form-grid">
-                    <div className="form-field">
-                      <Label className="form-label">Job Title *</Label>
-                      <Input
-                        className="form-input"
-                        placeholder="Senior Software Engineer"
-                        value={exp.title}
-                        onChange={(e) => updateWorkExperience(exp.id, { title: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <Label className="form-label">Company *</Label>
-                      <Input
-                        className="form-input"
-                        placeholder="Tech Solutions Inc."
-                        value={exp.company}
-                        onChange={(e) => updateWorkExperience(exp.id, { company: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <Label className="form-label">Start Date *</Label>
-                      <Input
-                        type="month"
-                        className="form-input"
-                        value={exp.startDate}
-                        onChange={(e) => updateWorkExperience(exp.id, { startDate: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <Label className="form-label">End Date</Label>
-                      <div className="flex items-center space-x-3">
-                        <Input
-                          type="month"
-                          className="form-input flex-1"
-                          value={exp.endDate}
-                          onChange={(e) => updateWorkExperience(exp.id, { endDate: e.target.value })}
-                          disabled={exp.current}
-                        />
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            checked={exp.current}
-                            onCheckedChange={(checked) => 
-                              updateWorkExperience(exp.id, { 
-                                current: checked as boolean,
-                                endDate: checked ? "" : exp.endDate
-                              })
-                            }
-                          />
-                          <Label className="text-sm text-gray-600">Current</Label>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="form-field md:col-span-2">
-                      <Label className="form-label">Location</Label>
-                      <Input
-                        className="form-input"
-                        placeholder="San Francisco, CA"
-                        value={exp.location}
-                        onChange={(e) => updateWorkExperience(exp.id, { location: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-field md:col-span-2">
-                      <Label className="form-label">Description</Label>
-                      <Textarea
-                        rows={4}
-                        className="form-textarea"
-                        placeholder="• Led development of microservices architecture reducing response time by 40%&#10;• Managed team of 5 developers and mentored junior engineers&#10;• Implemented CI/CD pipelines improving deployment efficiency"
-                        value={exp.description}
-                        onChange={(e) => updateWorkExperience(exp.id, { description: e.target.value })}
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        Use bullet points (•) to highlight key achievements
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {resumeData.workExperience.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <Briefcase className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                  <p>No work experience added yet</p>
-                  <Button
-                    onClick={addWorkExperience}
-                    variant="outline"
-                    className="mt-4"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Experience
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    education: () => (
-      <Card key="education">
-        <CardContent className="p-6">
-          <div className="section-header flex items-center justify-between">
-            <h3 className="section-title flex items-center"><GraduationCap className="section-icon" />Education</h3>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => moveSection('education', 'up')}><ChevronUp /></Button>
-              <Button variant="ghost" size="sm" onClick={() => moveSection('education', 'down')}><ChevronDown /></Button>
-              <Button variant="ghost" size="sm" onClick={() => toggleSection('education')}>
-                {expandedSections.education ? <ChevronUp /> : <ChevronDown />}
-              </Button>
-            </div>
-          </div>
-          {expandedSections.education && (
-            <div className="space-y-4">
-              {resumeData.education.map((edu, index) => (
-                <div key={edu.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-2 h-2 bg-primary rounded-full"></div>
-                      <span className="text-sm font-medium text-gray-600">
-                        Education #{index + 1}
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeEducation(edu.id)}
-                      className="text-destructive hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="form-grid">
-                    <div className="form-field">
-                      <Label className="form-label">Degree *</Label>
-                      <Input
-                        className="form-input"
-                        placeholder="Bachelor of Science"
-                        value={edu.degree}
-                        onChange={(e) => updateEducation(edu.id, { degree: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <Label className="form-label">Field of Study *</Label>
-                      <Input
-                        className="form-input"
-                        placeholder="Computer Science"
-                        value={edu.field}
-                        onChange={(e) => updateEducation(edu.id, { field: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-field md:col-span-2">
-                      <Label className="form-label">Institution *</Label>
-                      <Input
-                        className="form-input"
-                        placeholder="University of California, Berkeley"
-                        value={edu.institution}
-                        onChange={(e) => updateEducation(edu.id, { institution: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <Label className="form-label">Start Year</Label>
-                      <Input
-                        type="number"
-                        className="form-input"
-                        placeholder="2016"
-                        min="1950"
-                        max="2030"
-                        value={edu.startYear || ""}
-                        onChange={(e) => updateEducation(edu.id, { 
-                          startYear: e.target.value ? parseInt(e.target.value) : undefined 
-                        })}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <Label className="form-label">End Year</Label>
-                      <Input
-                        type="number"
-                        className="form-input"
-                        placeholder="2020"
-                        min="1950"
-                        max="2030"
-                        value={edu.endYear || ""}
-                        onChange={(e) => updateEducation(edu.id, { 
-                          endYear: e.target.value ? parseInt(e.target.value) : undefined 
-                        })}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <Label className="form-label">GPA (Optional)</Label>
-                      <Input
-                        type="number"
-                        className="form-input"
-                        placeholder="3.8"
-                        step="0.1"
-                        min="0"
-                        max="4"
-                        value={edu.gpa || ""}
-                        onChange={(e) => updateEducation(edu.id, { 
-                          gpa: e.target.value ? parseFloat(e.target.value) : undefined 
-                        })}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <Label className="form-label">Location</Label>
-                      <Input
-                        className="form-input"
-                        placeholder="Berkeley, CA"
-                        value={edu.location}
-                        onChange={(e) => updateEducation(edu.id, { location: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {resumeData.education.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <GraduationCap className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                  <p>No education added yet</p>
-                  <Button
-                    onClick={addEducation}
-                    variant="outline"
-                    className="mt-4"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Education
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    ),
-    skillCategories: () => (
-      <Card key="skillCategories">
-        <CardContent className="p-6">
-          <div className="section-header flex items-center justify-between">
-            <h3 className="section-title flex items-center"><Settings className="section-icon" />Skills & Technologies</h3>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => moveSection('skillCategories', 'up')}><ChevronUp /></Button>
-              <Button variant="ghost" size="sm" onClick={() => moveSection('skillCategories', 'down')}><ChevronDown /></Button>
-              <Button variant="ghost" size="sm" onClick={() => toggleSection('skills')}>
-                {expandedSections.skills ? <ChevronUp /> : <ChevronDown />}
-              </Button>
-            </div>
-          </div>
-          {expandedSections.skills && (
-            <div className="space-y-6">
-              {resumeData.skillCategories.map((category) => (
-                <div key={category.id}>
-                  <div className="flex items-center justify-between mb-3">
-                    <Input
-                      className="text-sm font-medium bg-transparent border-none focus:ring-0 focus:outline-none text-gray-700 p-0"
-                      placeholder="Programming Languages"
-                      value={category.name}
-                      onChange={(e) => updateSkillCategory(category.id, { name: e.target.value })}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeSkillCategory(category.id)}
-                      className="text-destructive hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {category.skills.map((skill, skillIndex) => (
-                      <span key={skillIndex} className="skill-tag">
-                        {skill}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="ml-2 p-0 h-auto text-primary hover:text-blue-700"
-                          onClick={() => removeSkill(category.id, skillIndex)}
-                        >
-                          ×
-                        </Button>
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      className="flex-1 text-sm"
-                      placeholder="Add a skill..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const input = e.target as HTMLInputElement;
-                          addSkill(category.id, input.value);
-                          input.value = '';
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        const input = e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement;
-                        if (input && input.value.trim()) {
-                          addSkill(category.id, input.value);
-                          input.value = '';
-                        }
-                      }}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                </div>
-              ))}
-
-              {resumeData.skillCategories.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <Settings className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                  <p>No skills added yet</p>
-                  <Button
-                    onClick={addSkillCategory}
-                    variant="outline"
-                    className="mt-4"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Skill Category
-                  </Button>
-                </div>
-              )}
-
-              {resumeData.skillCategories.length > 0 && (
-                <div className="text-center py-4 border-t border-gray-200">
-                  <Button
-                    onClick={addSkillCategory}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Skill Category
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    )
+  // Import resume data from JSON
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target?.result as string);
+        onUpdateData(imported);
+      } catch {
+        alert("Invalid resume file.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
-    <div className="space-y-4">
-      {/* Render sections in order */}
-      {sectionOrder.map(sectionId => {
-        if (sectionId in sectionRenderers) {
-          return sectionRenderers[sectionId as keyof typeof sectionRenderers]();
-        }
-        
-        // Handle custom sections
-        const customSection = (resumeData.customSections || []).find(s => s.id === sectionId);
-        if (customSection) {
-          return (
-            <Card key={customSection.id}>
-              <CardContent className="p-6">
-                <div className="section-header flex items-center justify-between">
-                  <Input
-                    className="section-title text-lg font-semibold"
-                    value={customSection.title}
-                    onChange={e => updateCustomSection(customSection.id, { title: e.target.value })}
-                  />
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => moveSection(customSection.id, 'up')}><ChevronUp /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => moveSection(customSection.id, 'down')}><ChevronDown /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => removeCustomSection(customSection.id)}><Trash2 /></Button>
-                  </div>
-                </div>
-                <Textarea
-                  className="mt-2"
-                  rows={4}
-                  placeholder="Section content..."
-                  value={customSection.content || ''}
-                  onChange={e => updateCustomSection(customSection.id, { content: e.target.value })}
-                />
-              </CardContent>
-            </Card>
-          );
-        }
-        
-        return null;
-      })}
-
-      <div className="text-center pt-4">
-        <Button onClick={addCustomSection} variant="outline" size="sm">
-          <Plus className="mr-2 h-4 w-4" /> Add Custom Section
+    <div className="space-y-8">
+      {/* Analytics Panel */}
+      <AnalyticsPanel
+        wordCount={analytics.wordCount}
+        keywordDensity={analytics.keywordDensity}
+        completeness={analytics.completeness}
+        sections={analytics.sections}
+        uniqueWordCount={analytics.uniqueWordCount}
+        vocabularyRichness={analytics.vocabularyRichness}
+        mostCommonWords={analytics.mostCommonWords}
+        spellingErrorCount={analytics.spellingErrorCount}
+        spellingErrors={analytics.spellingErrors}
+        passiveSentenceCount={analytics.passiveSentenceCount}
+        passiveSentences={analytics.passiveSentences}
+        sentenceStats={analytics.sentenceStats}
+        readingTime={analytics.readingTime}
+        bulletStats={analytics.bulletStats}
+        cliches={analytics.cliches}
+        flesch={analytics.flesch}
+        sectionReadability={analytics.sectionReadability}
+      />
+      {/* AI Toggle and API Key */}
+      <div className="flex items-center gap-4 mb-4">
+        <AiToggle useAi={useAi} onChange={setUseAi} />
+        {useAi && (
+          <Input
+            type="password"
+            placeholder="OpenAI API Key"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            className="w-64"
+          />
+        )}
+      </div>
+      {/* Job Description Input for Analysis */}
+      <div className="mb-4">
+        <Label>Paste Job Description for Analysis:</Label>
+        <Textarea
+          rows={3}
+          value={jobDesc}
+          onChange={(e) => setJobDesc(e.target.value)}
+          placeholder="Paste the job description here..."
+        />
+        <Button className="mt-2" onClick={debouncedAnalyzeJobDesc}>
+          Analyze Job Description
         </Button>
+      </div>
+      {/* Personal Info Section (lazy loaded) */}
+      <Suspense fallback={<div>Loading personal info...</div>}>
+        <LazyPersonalInfoSection
+          personalInfo={resumeData.personalInfo}
+          expanded={sectionExpanded.personalInfo}
+          onToggle={() => toggleSection("personal")}
+          onMoveUp={() => moveSectionUp("personalInfo")}
+          onMoveDown={() => moveSectionDown("personalInfo")}
+          onUpdate={handlePersonalInfoUpdate}
+          onGenerateSummary={handleAISummary}
+          analyzeResult={analyzeResult}
+          highlightKeywords={highlightKeywords}
+        />
+      </Suspense>
+      {/* Work Experience Section (lazy loaded) */}
+      <Suspense fallback={<div>Loading work experience...</div>}>
+        <LazyWorkExperienceSection
+          workExperience={resumeData.workExperience}
+          expanded={sectionExpanded.workExperience}
+          onToggle={() => toggleSection("experience")}
+          onMoveUp={() => moveSectionUp("workExperience")}
+          onMoveDown={() => moveSectionDown("workExperience")}
+          onAdd={addWorkExperience}
+          onUpdate={updateWorkExperience}
+          onRemove={removeWorkExperience}
+          onMove={moveWorkExperience}
+          onGenerateBullets={handleAIWorkExp}
+          analyzeResult={analyzeResult}
+          highlightKeywords={highlightKeywords}
+        />
+      </Suspense>
+      {/* Education Section (lazy loaded) */}
+      <Suspense fallback={<div>Loading education...</div>}>
+        <LazyEducationSection
+          education={resumeData.education}
+          expanded={sectionExpanded.education}
+          onToggle={() => toggleSection("education")}
+          onMoveUp={() => moveSectionUp("education")}
+          onMoveDown={() => moveSectionDown("education")}
+          onAdd={addEducation}
+          onUpdate={updateEducation}
+          onRemove={removeEducation}
+          onMove={moveSection}
+        />
+      </Suspense>
+      {/* Skills Section (lazy loaded) */}
+      <Suspense fallback={<div>Loading skills...</div>}>
+        <LazySkillsSection
+          skillCategories={resumeData.skillCategories}
+          expanded={sectionExpanded.skillCategories}
+          onToggle={() => toggleSection("skills")}
+          onMoveUp={() => moveSectionUp("skillCategories")}
+          onMoveDown={() => moveSectionDown("skillCategories")}
+          onAddCategory={addSkillCategory}
+          onUpdateCategory={updateSkillCategory}
+          onRemoveCategory={removeSkillCategory}
+          onAddSkill={addSkill}
+          onRemoveSkill={removeSkill}
+          highlightKeywords={highlightKeywords}
+          analyzeResult={analyzeResult}
+        />
+      </Suspense>
+      {/* Custom Sections (lazy loaded) */}
+      <Suspense fallback={<div>Loading custom sections...</div>}>
+        <LazyCustomSections
+          customSections={resumeData.customSections || []}
+          sectionOrder={resumeData.sectionOrder || []}
+          onAdd={addCustomSection}
+          onUpdate={updateCustomSection}
+          onRemove={removeCustomSection}
+          onMove={moveSection}
+        />
+      </Suspense>
+      {/* Version History UI */}
+      <div className="mb-4">
+        <Button
+          onClick={() => setShowVersions((v) => !v)}
+          variant="outline"
+          size="sm"
+        >
+          {showVersions ? "Hide Version History" : "Show Version History"}
+        </Button>
+        {showVersions && (
+          <div className="mt-2 border rounded p-2 bg-gray-50">
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-semibold text-sm">Version History</span>
+              <Button
+                onClick={handleClearVersions}
+                size="xs"
+                variant="destructive"
+              >
+                Clear All
+              </Button>
+            </div>
+            {versions.length === 0 && (
+              <div className="text-xs text-gray-500">
+                No versions saved yet.
+              </div>
+            )}
+            <ul className="space-y-1 max-h-40 overflow-y-auto">
+              {versions.map((v, i) => (
+                <li
+                  key={i}
+                  className="flex items-center justify-between text-xs"
+                >
+                  <span>{new Date(v.timestamp).toLocaleString()}</span>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => handleRestoreVersion(i)}
+                  >
+                    Restore
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+      {/* Export/Import UI */}
+      <div className="mb-4 flex gap-2 items-center">
+        <Button onClick={handleExport} variant="outline" size="sm">
+          Export Resume (JSON)
+        </Button>
+        <label className="inline-block cursor-pointer text-sm font-medium">
+          <span className="sr-only">Import Resume</span>
+          <input
+            type="file"
+            accept="application/json"
+            onChange={handleImport}
+            className="hidden"
+          />
+          <span className="px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200">
+            Import Resume
+          </span>
+        </label>
+      </div>
+      {/* Advanced Analytics UI */}
+      <div className="mb-4">
+        <div className="font-semibold text-sm mb-1">Section Analytics</div>
+        <table className="w-full text-xs border">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="p-1 border">Section</th>
+              <th className="p-1 border">Words</th>
+              <th className="p-1 border">Characters</th>
+              <th className="p-1 border">Keyword Coverage</th>
+              <th className="p-1 border">Readability</th>
+              <th className="p-1 border">ATS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sectionAnalytics.map((sec) => (
+              <tr key={sec.name}>
+                <td className="p-1 border">{sec.name}</td>
+                <td className="p-1 border text-center">{sec.wordCount}</td>
+                <td className="p-1 border text-center">{sec.charCount}</td>
+                <td className="p-1 border text-center">
+                  {sec.keywordCoverage}%
+                </td>
+                <td className="p-1 border text-center">{sec.readability}</td>
+                <td className="p-1 border text-center">{sec.ats}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {/* Keyword Frequency Table */}
+        <div className="mt-2">
+          <div className="font-semibold text-xs mb-1">Keyword Frequency</div>
+          <table className="w-full text-xs border">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="p-1 border">Keyword</th>
+                <th className="p-1 border">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(sectionAnalytics[0]?.keywordFreq || {}).map(
+                ([k, v]) => (
+                  <tr key={k}>
+                    <td className="p-1 border">{k}</td>
+                    <td className="p-1 border text-center">{v}</td>
+                  </tr>
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
+}
+
+// Debounce utility
+function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
+  let timer: ReturnType<typeof setTimeout>;
+  return ((...args: any[]) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  }) as T;
 }
