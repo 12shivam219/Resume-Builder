@@ -1,4 +1,4 @@
-import { useState, Suspense, useCallback, useEffect, useMemo } from "react";
+import React, { useState, Suspense, useCallback, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,11 +42,11 @@ import {
   getAIWorkBullets,
   analyzeJobDescriptionAI,
 } from "@/lib/ai-suggest";
-import { AnalyticsPanel } from "../forms/ResumeForm/AnalyticsPanel";
-import { getResumeAnalytics } from "../forms/ResumeForm/analyticsUtils";
+import { AnalyticsPanel } from "./forms/ResumeForm/AnalyticsPanel";
+import { getResumeAnalytics } from "./forms/ResumeForm/analyticsUtils";
 import { ResumeStorage } from "@/lib/resume-storage";
-import flesch from "flesch"; // You may need to install a simple readability package or use a local function
-import { highlightKeywords } from "../forms/ResumeForm/utils";
+import { flesch } from "flesch";
+import { highlightKeywords } from "./forms/ResumeForm/utils";
 
 interface ResumeFormProps {
   resumeData: ResumeData;
@@ -55,19 +55,34 @@ interface ResumeFormProps {
 
 // Lazy load all major sections for code splitting
 const LazyPersonalInfoSection = React.lazy(
-  () => import("../forms/ResumeForm/PersonalInfoSection")
+  () =>
+    import("./forms/ResumeForm/PersonalInfoSection").then((mod) => ({
+      default: mod.PersonalInfoSection,
+    }))
 );
 const LazyWorkExperienceSection = React.lazy(
-  () => import("../forms/ResumeForm/WorkExperienceSection")
+  () =>
+    import("./forms/ResumeForm/WorkExperienceSection").then((mod) => ({
+      default: mod.WorkExperienceSection,
+    }))
 );
 const LazyEducationSection = React.lazy(
-  () => import("../forms/ResumeForm/EducationSection")
+  () =>
+    import("./forms/ResumeForm/EducationSection").then((mod) => ({
+      default: mod.EducationSection,
+    }))
 );
 const LazySkillsSection = React.lazy(
-  () => import("../forms/ResumeForm/SkillsSection")
+  () =>
+    import("./forms/ResumeForm/SkillsSection").then((mod) => ({
+      default: mod.SkillsSection,
+    }))
 );
 const LazyCustomSections = React.lazy(
-  () => import("../forms/ResumeForm/CustomSections")
+  () =>
+    import("./forms/ResumeForm/CustomSections").then((mod) => ({
+      default: mod.CustomSections,
+    }))
 );
 
 export default function ResumeForm({
@@ -299,12 +314,58 @@ export default function ResumeForm({
     ...(resumeData.customSections?.map((s) => s.id) || []),
   ];
 
-  // --- Analytics panel ---
+  // AI Functions
+  const handleAISummary = async () => {
+    try {
+      const summary = useAi
+        ? await getAISummary(resumeData, jobDesc, tone, apiKey)
+        : localSuggestSummary(resumeData, jobDesc, tone, {});
+      onUpdateData({
+        personalInfo: { ...resumeData.personalInfo, summary },
+      });
+    } catch (error) {
+      console.error("Error generating summary:", error);
+    }
+  };
+
+  const handleAIWorkExp = async (id: string) => {
+    try {
+      const exp = resumeData.workExperience.find((e) => e.id === id);
+      if (!exp) return;
+
+      const bullets = useAi
+        ? await getAIWorkBullets(exp, jobDesc, tone, apiKey)
+        : localSuggestWorkBullets(exp, jobDesc, tone, {});
+      
+      updateWorkExperience(id, { description: Array.isArray(bullets) ? bullets.join("\n") : bullets });
+    } catch (error) {
+      console.error("Error generating work bullets:", error);
+    }
+  };
+
+  const handleAnalyzeJobDesc = async () => {
+    try {
+      const resumeText = JSON.stringify(resumeData);
+      const result = useAi
+        ? await analyzeJobDescriptionAI(jobDesc, resumeText, apiKey)
+        : localAnalyzeJobDescription(jobDesc, JSON.stringify(resumeData));
+      setAnalyzeResult(result);
+    } catch (error) {
+      console.error("Error analyzing job description:", error);
+    }
+  };
+
+  const debouncedAnalyzeJobDesc = useCallback(
+    debounce(handleAnalyzeJobDesc, 500),
+    [jobDesc, useAi, apiKey, resumeData]
+  );
+
+  // Analytics
   const analytics = useMemo(
     () => getResumeAnalytics(resumeData, analyzeResult, jobDesc),
     [resumeData, analyzeResult, jobDesc]
   );
-  // Advanced analytics: word/character count per section, keyword density per section, keyword frequency, readability, ATS check
+
   const sectionAnalytics = useMemo(() => {
     const summary = resumeData.personalInfo.summary || "";
     const work = resumeData.workExperience
@@ -316,41 +377,43 @@ export default function ResumeForm({
     const skills = resumeData.skillCategories
       .flatMap((c) => c.skills)
       .join(" ");
+    
     const sections = [
       { name: "Summary", text: summary },
       { name: "Work Experience", text: work },
       { name: "Education", text: education },
       { name: "Skills", text: skills },
     ];
+
     const keywordList = (jobDesc.match(/\b\w+\b/g) || []).map((k) =>
       k.toLowerCase()
     );
-    // Keyword frequency map
+
+    // Create keyword frequency map
     const keywordFreq: Record<string, number> = {};
-    keywordList.forEach((k) => {
-      keywordFreq[k] = 0;
-    });
     const allText = [summary, work, education, skills].join(" ").toLowerCase();
+    
     keywordList.forEach((k) => {
       const re = new RegExp(`\\b${k}\\b`, "gi");
       keywordFreq[k] = (allText.match(re) || []).length;
     });
-    // Readability (Flesch Reading Ease)
+
     function getReadability(text: string) {
       if (!text.trim()) return "-";
       try {
-        // Use a simple Flesch implementation or fallback
-        return Math.round(flesch(text));
+        const countsResult = counts(text);
+        return Math.round(flesch(countsResult));
       } catch {
         return "-";
       }
     }
-    // ATS compatibility: check for tables, images, columns, or non-standard fonts (simple heuristic)
+
     function getATSCompatibility(text: string) {
       if (/table|column|image|font/i.test(text)) return "Low";
       if (text.length < 100) return "Low";
       return "High";
     }
+
     return sections.map((sec) => {
       const words = sec.text.split(/\s+/).filter(Boolean);
       const chars = sec.text.length;
@@ -360,6 +423,7 @@ export default function ResumeForm({
       const keywordCoverage = keywordList.length
         ? Math.round((presentKeywords.length / keywordList.length) * 100)
         : 0;
+      
       return {
         ...sec,
         wordCount: words.length,
@@ -367,33 +431,23 @@ export default function ResumeForm({
         keywordCoverage,
         readability: getReadability(sec.text),
         ats: getATSCompatibility(sec.text),
+        keywordFreq, // Include frequency map in each section
       };
     });
   }, [resumeData, jobDesc]);
-
-  // Section expansion state helpers
-  const sectionExpanded = {
-    personalInfo: expandedSections.personal,
-    workExperience: expandedSections.experience,
-    education: expandedSections.education,
-    skillCategories: expandedSections.skills,
-  };
-
-  // Section move helpers
-  const moveSectionUp = (section: string) => moveSection(section, "up");
-  const moveSectionDown = (section: string) => moveSection(section, "down");
-
-  // Debounced job description analysis
-  const debouncedAnalyzeJobDesc = useCallback(
-    debounce(handleAnalyzeJobDesc, 500),
-    [jobDesc, useAi, apiKey, resumeData]
-  );
 
   // Save version on every update
   useEffect(() => {
     ResumeStorage.saveVersion(resumeData);
     setVersions(ResumeStorage.getVersions());
   }, [resumeData]);
+
+  // Job description analysis effect
+  useEffect(() => {
+    if (jobDesc) {
+      debouncedAnalyzeJobDesc();
+    }
+  }, [jobDesc, debouncedAnalyzeJobDesc]);
 
   // Restore version handler
   const handleRestoreVersion = (index: number) => {
@@ -442,10 +496,23 @@ export default function ResumeForm({
     reader.readAsText(file);
   };
 
+  // Section expansion state helpers
+  const sectionExpanded = {
+    personalInfo: expandedSections.personal,
+    workExperience: expandedSections.experience,
+    education: expandedSections.education,
+    skillCategories: expandedSections.skills,
+  };
+
+  // Section move helpers
+  const moveSectionUp = (section: string) => moveSection(section, "up");
+  const moveSectionDown = (section: string) => moveSection(section, "down");
+
   return (
     <div className="space-y-8 max-w-3xl mx-auto p-4 bg-gray-50 rounded-lg shadow-md">
       {/* Analytics Panel */}
       <AnalyticsPanel {...analytics} />
+      
       {/* AI Toggle and API Key */}
       <div className="flex items-center gap-4 mb-4">
         <AiToggle useAi={useAi} onChange={setUseAi} />
@@ -459,6 +526,7 @@ export default function ResumeForm({
           />
         )}
       </div>
+
       {/* Job Description Input for Analysis */}
       <div className="mb-4">
         <Label className="block mb-1 font-medium">
@@ -471,11 +539,12 @@ export default function ResumeForm({
           onChange={(e) => setJobDesc(e.target.value)}
           className="w-full border rounded p-2 text-sm"
         />
-        <Button onClick={analyzeJobDescription} className="mt-2">
+        <Button onClick={handleAnalyzeJobDesc} className="mt-2">
           Analyze Job Description
         </Button>
       </div>
-      {/* Personal Info Section (lazy loaded) */}
+
+      {/* Personal Info Section */}
       <Suspense fallback={<div>Loading personal info...</div>}>
         <LazyPersonalInfoSection
           personalInfo={resumeData.personalInfo}
@@ -489,7 +558,8 @@ export default function ResumeForm({
           highlightKeywords={highlightKeywords}
         />
       </Suspense>
-      {/* Work Experience Section (lazy loaded) */}
+
+      {/* Work Experience Section */}
       <Suspense fallback={<div>Loading work experience...</div>}>
         <LazyWorkExperienceSection
           workExperience={resumeData.workExperience}
@@ -501,12 +571,16 @@ export default function ResumeForm({
           onUpdate={updateWorkExperience}
           onRemove={removeWorkExperience}
           onMove={moveWorkExperience}
-          onGenerateBullets={handleAIWorkExp}
+          onGenerateBullets={(index: number) => {
+            const exp = resumeData.workExperience[index];
+            if (exp) handleAIWorkExp(exp.id);
+          }}
           analyzeResult={analyzeResult}
           highlightKeywords={highlightKeywords}
         />
       </Suspense>
-      {/* Education Section (lazy loaded) */}
+
+      {/* Education Section */}
       <Suspense fallback={<div>Loading education...</div>}>
         <LazyEducationSection
           education={resumeData.education}
@@ -520,7 +594,8 @@ export default function ResumeForm({
           onMove={moveSection}
         />
       </Suspense>
-      {/* Skills Section (lazy loaded) */}
+
+      {/* Skills Section */}
       <Suspense fallback={<div>Loading skills...</div>}>
         <LazySkillsSection
           skillCategories={resumeData.skillCategories}
@@ -537,7 +612,8 @@ export default function ResumeForm({
           analyzeResult={analyzeResult}
         />
       </Suspense>
-      {/* Custom Sections (lazy loaded) */}
+
+      {/* Custom Sections */}
       <Suspense fallback={<div>Loading custom sections...</div>}>
         <LazyCustomSections
           customSections={resumeData.customSections || []}
@@ -548,6 +624,7 @@ export default function ResumeForm({
           onMove={moveSection}
         />
       </Suspense>
+
       {/* Version History UI */}
       <div className="mb-4">
         <Button
@@ -563,7 +640,7 @@ export default function ResumeForm({
               <span className="font-semibold text-sm">Version History</span>
               <Button
                 onClick={handleClearVersions}
-                size="xs"
+                size="sm"
                 variant="destructive"
               >
                 Clear All
@@ -582,7 +659,7 @@ export default function ResumeForm({
                 >
                   <span>{new Date(v.timestamp).toLocaleString()}</span>
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="secondary"
                     onClick={() => handleRestoreVersion(i)}
                   >
@@ -594,6 +671,7 @@ export default function ResumeForm({
           </div>
         )}
       </div>
+
       {/* Export/Import UI */}
       <div className="mb-4 flex gap-2 items-center">
         <Button onClick={handleExport} variant="outline" size="sm">
@@ -612,6 +690,7 @@ export default function ResumeForm({
           </span>
         </label>
       </div>
+
       {/* Advanced Analytics UI */}
       <div className="mb-4">
         <div className="font-semibold text-sm mb-1">Section Analytics</div>
@@ -641,28 +720,31 @@ export default function ResumeForm({
             ))}
           </tbody>
         </table>
+
         {/* Keyword Frequency Table */}
-        <div className="mt-2">
-          <div className="font-semibold text-xs mb-1">Keyword Frequency</div>
-          <table className="w-full text-xs border">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="p-1 border">Keyword</th>
-                <th className="p-1 border">Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(sectionAnalytics[0]?.keywordFreq || {}).map(
-                ([k, v]) => (
+        {analyzeResult?.missingKeywords && (
+          <div className="mt-2">
+            <div className="font-semibold text-xs mb-1">Keyword Frequency</div>
+            <table className="w-full text-xs border">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="p-1 border">Keyword</th>
+                  <th className="p-1 border">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analyzeResult.missingKeywords.map((k) => (
                   <tr key={k}>
                     <td className="p-1 border">{k}</td>
-                    <td className="p-1 border text-center">{v}</td>
+                    <td className="p-1 border text-center">
+                      {sectionAnalytics[0]?.keywordFreq?.[k.toLowerCase()] || 0}
+                    </td>
                   </tr>
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -676,3 +758,28 @@ function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
     timer = setTimeout(() => fn(...args), delay);
   }) as T;
 }
+
+// Returns an object with sentence, word, and syllable counts for flesch()
+function counts(text: string) {
+  // Count sentences (ends with . ! ?)
+  const sentenceCount = (text.match(/[\.\!\?]+/g) || []).length || 1;
+  // Count words (split by whitespace)
+  const words = text.match(/\b\w+\b/g) || [];
+  const wordCount = words.length;
+  // Count syllables (very rough estimate: count vowel groups in each word)
+  const syllableCount = words.reduce((sum, word) => {
+    const syl = word
+      .toLowerCase()
+      .replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "")
+      .replace(/^y/, "")
+      .match(/[aeiouy]{1,2}/g);
+    return sum + (syl ? syl.length : 1);
+  }, 0);
+
+  return {
+    sentences: sentenceCount,
+    words: wordCount,
+    syllables: syllableCount,
+  };
+}
+

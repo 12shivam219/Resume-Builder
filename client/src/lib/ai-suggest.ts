@@ -2,7 +2,7 @@
 // All logic is privacy-friendly and runs locally (no external API calls)
 
 // Suggest a professional summary based on resume fields
-export function localSuggestSummary({ name, title, yearsExperience, skills, industry }: {
+export function localSuggestSummary(resumeData: { customSections: { id: string; title: string; content?: string | undefined; }[]; sectionOrder: string[]; personalInfo: { firstName: string; lastName: string; email: string; phone: string; title?: string | undefined; address?: string | undefined; linkedin?: string | undefined; summary?: string | undefined; }; workExperience: { id: string; title: string; company: string; startDate: string; current: boolean; location?: string | undefined; endDate?: string | undefined; description?: string | undefined; }[]; education: { id: string; degree: string; field: string; institution: string; location?: string | undefined; startYear?: number | undefined; endYear?: number | undefined; gpa?: number | undefined; }[]; skillCategories: { id: string; name: string; skills: string[]; }[]; template: string; templateSettings?: Record<string, any> | undefined; }, jobDesc: string, tone: string, { name, title, yearsExperience, skills, industry }: {
   name?: string;
   title?: string;
   yearsExperience?: number;
@@ -23,7 +23,7 @@ export function localSuggestSummary({ name, title, yearsExperience, skills, indu
 }
 
 // Suggest improvements for work experience bullet points
-export function localSuggestWorkBullets({ role, industry, skills }: {
+export function localSuggestWorkBullets(exp: { id: string; title: string; company: string; startDate: string; current: boolean; location?: string | undefined; endDate?: string | undefined; description?: string | undefined; }, jobDesc: string, tone: string, { role, industry, skills }: {
   role?: string;
   industry?: string;
   skills?: string[];
@@ -57,7 +57,7 @@ export function localAnalyzeJobDescription(jobDescription: string, resumeText: s
 
 // --- AI (OpenAI API) functions ---
 // These require an API key and internet connection
-export async function getAISummary(prompt: string, apiKey: string): Promise<string> {
+export async function getAISummary(resumeData: { customSections: { id: string; title: string; content?: string | undefined; }[]; sectionOrder: string[]; personalInfo: { firstName: string; lastName: string; email: string; phone: string; title?: string | undefined; address?: string | undefined; linkedin?: string | undefined; summary?: string | undefined; }; workExperience: { id: string; title: string; company: string; startDate: string; current: boolean; location?: string | undefined; endDate?: string | undefined; description?: string | undefined; }[]; education: { id: string; degree: string; field: string; institution: string; location?: string | undefined; startYear?: number | undefined; endYear?: number | undefined; gpa?: number | undefined; }[]; skillCategories: { id: string; name: string; skills: string[]; }[]; template: string; templateSettings?: Record<string, any> | undefined; }, prompt: string, apiKey: string, apiKey: string): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -79,7 +79,7 @@ export async function getAISummary(prompt: string, apiKey: string): Promise<stri
   return data.choices?.[0]?.message?.content?.trim() || '';
 }
 
-export async function getAIWorkBullets(prompt: string, apiKey: string): Promise<string[]> {
+export async function getAIWorkBullets(exp: { id: string; title: string; company: string; startDate: string; current: boolean; location?: string | undefined; endDate?: string | undefined; description?: string | undefined; }, prompt: string, apiKey: string, apiKey: string): Promise<string[]> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
