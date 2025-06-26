@@ -318,7 +318,7 @@ export default function ResumeForm({
   const handleAISummary = async () => {
     try {
       const summary = useAi
-        ? await getAISummary(resumeData, jobDesc, tone, apiKey)
+        ? await getAISummary(resumeData, jobDesc, apiKey)
         : localSuggestSummary(resumeData, jobDesc, tone, {});
       onUpdateData({
         personalInfo: { ...resumeData.personalInfo, summary },
@@ -334,7 +334,7 @@ export default function ResumeForm({
       if (!exp) return;
 
       const bullets = useAi
-        ? await getAIWorkBullets(exp, jobDesc, tone, apiKey)
+        ? await getAIWorkBullets(exp, jobDesc, apiKey)
         : localSuggestWorkBullets(exp, jobDesc, tone, {});
       
       updateWorkExperience(id, { description: Array.isArray(bullets) ? bullets.join("\n") : bullets });

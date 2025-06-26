@@ -57,7 +57,11 @@ export function localAnalyzeJobDescription(jobDescription: string, resumeText: s
 
 // --- AI (OpenAI API) functions ---
 // These require an API key and internet connection
-export async function getAISummary(resumeData: { customSections: { id: string; title: string; content?: string | undefined; }[]; sectionOrder: string[]; personalInfo: { firstName: string; lastName: string; email: string; phone: string; title?: string | undefined; address?: string | undefined; linkedin?: string | undefined; summary?: string | undefined; }; workExperience: { id: string; title: string; company: string; startDate: string; current: boolean; location?: string | undefined; endDate?: string | undefined; description?: string | undefined; }[]; education: { id: string; degree: string; field: string; institution: string; location?: string | undefined; startYear?: number | undefined; endYear?: number | undefined; gpa?: number | undefined; }[]; skillCategories: { id: string; name: string; skills: string[]; }[]; template: string; templateSettings?: Record<string, any> | undefined; }, prompt: string, apiKey: string, apiKey: string): Promise<string> {
+export async function getAISummary(
+  resumeData: { customSections: { id: string; title: string; content?: string | undefined; }[]; sectionOrder: string[]; personalInfo: { firstName: string; lastName: string; email: string; phone: string; title?: string | undefined; address?: string | undefined; linkedin?: string | undefined; summary?: string | undefined; }; workExperience: { id: string; title: string; company: string; startDate: string; current: boolean; location?: string | undefined; endDate?: string | undefined; description?: string | undefined; }[]; education: { id: string; degree: string; field: string; institution: string; location?: string | undefined; startYear?: number | undefined; endYear?: number | undefined; gpa?: number | undefined; }[]; skillCategories: { id: string; name: string; skills: string[]; }[]; template: string; templateSettings?: Record<string, any> | undefined; },
+  prompt: string,
+  apiKey: string
+): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -79,7 +83,11 @@ export async function getAISummary(resumeData: { customSections: { id: string; t
   return data.choices?.[0]?.message?.content?.trim() || '';
 }
 
-export async function getAIWorkBullets(exp: { id: string; title: string; company: string; startDate: string; current: boolean; location?: string | undefined; endDate?: string | undefined; description?: string | undefined; }, prompt: string, apiKey: string, apiKey: string): Promise<string[]> {
+export async function getAIWorkBullets(
+  exp: { id: string; title: string; company: string; startDate: string; current: boolean; location?: string | undefined; endDate?: string | undefined; description?: string | undefined; },
+  prompt: string,
+  apiKey: string
+): Promise<string[]> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
